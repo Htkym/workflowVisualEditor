@@ -1,0 +1,11 @@
+{
+  "description": "Unofficial Markdown designer for GitHub Agentic Workflows with validation through the installed gh aw CLI.",
+  "trust": "Editing is available. External commands are disabled until the workspace is trusted.",
+  "newWorkflow": "New Workflow",
+  "openDesigner": "Open Designer",
+  "openSourceBeside": "Open Source Beside",
+  "saveAndCompile": "Save and Compile",
+  "openGenerated": "Open Generated Workflow",
+  "checkEnvironment": "Check Environment",
+  "languageSetting": "Designer display language. When unset, follows VS Code. Command titles follow VS Code's language."
+}

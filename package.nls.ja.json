@@ -1,0 +1,11 @@
+{
+  "description": "GitHub Agentic Workflowsの非公式Markdownデザイナー。インストール済みのgh aw CLIで設定を確認できます。",
+  "trust": "編集は利用できます。信頼済みワークスペースでのみ外部コマンドを実行します。",
+  "newWorkflow": "Workflowを新規作成",
+  "openDesigner": "デザイナーを開く",
+  "openSourceBeside": "ソースを横に開く",
+  "saveAndCompile": "保存してコンパイル",
+  "openGenerated": "生成Workflowを開く",
+  "checkEnvironment": "環境を確認",
+  "languageSetting": "デザイナーの表示言語。未設定の場合はVS Codeに合わせます。コマンド名はVS Codeの表示言語に従います。"
+}

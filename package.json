@@ -1,0 +1,128 @@
+{
+  "name": "gh-aw-visual-editor",
+  "displayName": "Agentic Workflow Designer",
+  "description": "%description%",
+  "version": "0.1.0",
+  "publisher": "htkym",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Htkym/workflowVisualEditor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Htkym/workflowVisualEditor/issues"
+  },
+  "homepage": "https://github.com/Htkym/workflowVisualEditor#readme",
+  "icon": "resouces/icon.png",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": ["github", "agentic workflows", "workflow", "designer", "gh-aw"],
+  "main": "./dist/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%trust%"
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "configuration": {
+      "title": "Agentic Workflow Designer",
+      "properties": {
+        "ghAwDesigner.language": {
+          "type": "string",
+          "enum": ["ja", "en"],
+          "scope": "application",
+          "description": "%languageSetting%",
+          "enumDescriptions": ["日本語", "English"]
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "ghAwDesigner.newWorkflow",
+        "title": "%newWorkflow%",
+        "category": "Agentic Workflows"
+      },
+      {
+        "command": "ghAwDesigner.openDesigner",
+        "title": "%openDesigner%",
+        "category": "Agentic Workflows"
+      },
+      {
+        "command": "ghAwDesigner.openSourceBeside",
+        "title": "%openSourceBeside%",
+        "category": "Agentic Workflows"
+      },
+      {
+        "command": "ghAwDesigner.saveAndCompile",
+        "title": "%saveAndCompile%",
+        "category": "Agentic Workflows"
+      },
+      {
+        "command": "ghAwDesigner.openGenerated",
+        "title": "%openGenerated%",
+        "category": "Agentic Workflows"
+      },
+      {
+        "command": "ghAwDesigner.checkEnvironment",
+        "title": "%checkEnvironment%",
+        "category": "Agentic Workflows"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "ghAwDesigner.workflow",
+        "displayName": "%openDesigner%",
+        "selector": [
+          {
+            "filenamePattern": "*.md"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "ghAwDesigner.openDesigner",
+          "when": "resourceExtname == .md && resourcePath =~ /[\\\\/]\\.github[\\\\/]workflows[\\\\/].+\\.md$/",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "ghAwDesigner.openDesigner",
+          "when": "resourceExtname == .md && resourcePath =~ /[\\\\/]\\.github[\\\\/]workflows[\\\\/].+\\.md$/ && activeCustomEditorId != ghAwDesigner.workflow",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "tsc --noEmit",
+    "vscode:prepublish": "npm run check && npm run build",
+    "package": "vsce package --no-dependencies --out artifacts/gh-aw-visual-editor-0.1.0.vsix"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/vscode": "^1.96.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Check release version and Marketplace credential
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          if ($env:GITHUB_REF_NAME -ne "v$($package.version)") { throw 'Tag must match package.json version.' }
+          if (-not $env:VSCE_PAT) { throw 'VSCE_PAT repository secret is required.' }
+          $visibility = gh repo view "$env:GITHUB_REPOSITORY" --json visibility --jq .visibility
+          if ($visibility -ne 'PUBLIC') { throw 'Repository must be public before Marketplace publication.' }
+      - run: npm ci
+      - run: npm run check
+      - run: npm run package
+      - run: pwsh -NoProfile -File scripts/verify-vsix.ps1
+      - name: Publish to Visual Studio Marketplace
+        run: npx --no-install vsce publish --skip-duplicate --packagePath artifacts/gh-aw-visual-editor-0.1.0.vsix
+      - name: Publish to Open VSX
+        if: ${{ env.OVSX_PAT != '' }}
+        run: npx --yes ovsx publish artifacts/gh-aw-visual-editor-0.1.0.vsix --pat "$env:OVSX_PAT"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$env:GITHUB_REF_NAME" artifacts/gh-aw-visual-editor-0.1.0.vsix --generate-notes --verify-tag
