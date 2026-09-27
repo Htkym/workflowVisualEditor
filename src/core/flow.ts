@@ -77,8 +77,8 @@ export function validFlowEdit(input: unknown): input is FlowEdit {
   if (e.action === 'step.move') return e.direction === -1 || e.direction === 1;
   return e.action === 'step.edit' && stepFields.includes(e.field!) && short(e.value);
 }
-export function instructionSections(text: string, parsed = parseWorkflow(text)): Instruction[] {
-  const starts: { start: number; title: string; content: number }[] = [];
+function instructionHeadings(text: string, parsed: Parsed) {
+  const starts: { start: number; title: string; content: number; conditional: boolean }[] = [];
   let offset = parsed.bodyStart, fence = '', htmlComment = false, condition = 0;
   for (const line of parsed.body.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
     const bare = line.replace(/\r?\n$/, '');
@@ -87,13 +87,17 @@ export function instructionSections(text: string, parsed = parseWorkflow(text)):
       if (!fence) fence = marker[1]; else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && new RegExp(`^ {0,3}${fence[0]}{${fence.length},}\\s*$`).test(bare)) fence = '';
     } else if (!fence && !htmlComment) {
       const heading = /^##[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(bare);
-      if (heading && !condition) starts.push({ start: offset, title: heading[1], content: offset + line.length });
+      if (heading) starts.push({ start: offset, title: heading[1], content: offset + line.length, conditional: condition > 0 });
       condition += (bare.match(/\{\{#if\b/g) ?? []).length - (bare.match(/\{\{\/if\}\}/g) ?? []).length;
       condition = Math.max(0, condition);
     }
     if (!fence) { if (bare.includes('<!--')) htmlComment = true; if (bare.includes('-->')) htmlComment = false; }
     offset += line.length;
   }
+  return starts;
+}
+export function instructionSections(text: string, parsed = parseWorkflow(text)): Instruction[] {
+  const starts = instructionHeadings(text, parsed).filter(heading => !heading.conditional);
   const sections: Instruction[] = [];
   let cursor = parsed.bodyStart;
   for (let i = 0; i < starts.length; i++) {
@@ -410,7 +414,10 @@ function patchInstruction(text: string, p: Parsed, e: FlowEdit): Patch {
   const normalized = (s: string) => s.replace(/\r\n|\r|\n/g, p.eol);
   const sections = instructionSections(text, p), section = sections[e.index!];
   const title = (e.title ?? section?.title ?? '').trim(), definition = inlineDefinition(title);
-  if (definition && ['instruction.add', 'instruction.edit'].includes(e.action) && sections.some(s => s.index !== (e.action === 'instruction.edit' ? e.index : -1) && s.definition?.kind === definition.kind && s.definition.name === definition.name)) throw new Error('Definition name already exists. / 同じ名前の定義があります。');
+  if (definition && ['instruction.add', 'instruction.edit'].includes(e.action) && instructionHeadings(text, p).some(heading => {
+    const existing = inlineDefinition(heading.title);
+    return heading.start !== (e.action === 'instruction.edit' ? section?.start : -1) && existing?.kind === definition.kind && existing.name === definition.name;
+  })) throw new Error('Definition name already exists. / 同じ名前の定義があります。');
   const heading = (title: string, content: string, close: boolean) => `## ${title}${p.eol}${p.eol}${normalized(content).replace(/\s*$/, '')}${p.eol}${p.eol}${close && definition ? `## end ${definition.kind}: \`${definition.name}\`${p.eol}${p.eol}` : ''}`;
   if (e.action === 'instruction.add') {
     const last = sections.at(-1);
