@@ -226,6 +226,7 @@ window.addEventListener('message', event => {
   // A UI-language change must not discard unapplied forms or rewrite Markdown.
   const keepDraft = pending && sameVersion && languageChanged;
   const drafts = keepDraft ? Array.from(app.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select')).map(input => ({ value: input.value, checked: input instanceof HTMLInputElement ? input.checked : undefined, start: input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement ? input.selectionStart : null, end: input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement ? input.selectionEnd : null })) : [];
+  const openDetails = keepDraft ? Array.from(app.querySelectorAll<HTMLDetailsElement>('details[id][open]')).map(details => details.id) : [];
   const focus = document.activeElement?.id;
   japanese = message.language === 'ja'; document.documentElement.lang = japanese ? 'ja' : 'en';
   if (pending && !keepDraft) alerts.textContent = t('The source changed. Review the refreshed form before applying.', 'ソースが変更されました。更新されたフォームを確認してから適用してください。');
@@ -236,6 +237,7 @@ window.addEventListener('message', event => {
     if (input instanceof HTMLInputElement && draft.checked !== undefined) input.checked = draft.checked;
     if ((input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) && draft.start !== null && draft.end !== null) input.setSelectionRange(draft.start, draft.end);
   });
+  if (keepDraft) { document.getElementById('instruction-kind')?.dispatchEvent(new Event('prompt-restore')); for (const id of openDetails) { const details = document.getElementById(id); if (details instanceof HTMLDetailsElement) details.open = true; } }
   updateVisibility();
   if (focus) document.getElementById(focus)?.focus();
 });

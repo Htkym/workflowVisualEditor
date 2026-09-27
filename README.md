@@ -15,9 +15,11 @@ gh extension install github/gh-aw
 gh aw version
 ```
 
-Install **Agentic Workflow Designer** from the VS Code Extensions view after publication. Alternatively, download `gh-aw-visual-editor-0.1.0.vsix` from a GitHub Release and use **Extensions: Install from VSIX…**. Open your local repository folder, then run **Agentic Workflows: Check Environment**. The editor never installs or updates tools automatically. GitHub authentication and engine credentials are separate prerequisites for running a workflow on GitHub.
+Install **Agentic Workflow Designer** from the VS Code Extensions view. Alternatively, download `gh-aw-visual-editor-0.1.1.vsix` from a GitHub Release and use **Extensions: Install from VSIX…**. Open your local repository folder, then run **Agentic Workflows: Check Environment**. The editor never installs or updates tools automatically. GitHub authentication and engine credentials are separate prerequisites for running a workflow on GitHub.
 
 ## Use
+
+For a step-by-step walkthrough, see [First workflow practice (Japanese)](docs/first-workflow.ja.md), which covers instructions, settings, and generated jobs while building a repository improvement report.
 
 Run **Agentic Workflows: New Workflow**, select a template, and enter a file name without `.md`. Templates cover a minimal workflow, repository investigation, issue triage and scheduled reports. You can also duplicate an existing Markdown document. Files are created under `.github/workflows/` without overwriting existing files. Multi-folder workspaces prompt for the destination.
 
@@ -36,7 +38,7 @@ Right-click a Markdown file under `.github/workflows/` and choose **Open Designe
 | View | Use |
 |---|---|
 | Settings | Choose a configuration section and edit triggers, engine, tools, permissions, safe outputs and other fields. |
-| Markdown body | Select a heading from the outline. Edit its title and text, use formatting buttons, and add, reorder or delete sections. |
+| Markdown body | Add, edit, reorder or delete prompt sections and inline agent/skill definitions. Insert imports, run information and conditional prompts. |
 | Jobs and steps | Create custom jobs and steps, or add supported Markdown settings to compiler-generated jobs. |
 | Flow view | See declared job dependencies and expected gh-aw jobs in a vertical diagram. Select a job to open its editor. Dashed elements are inferred from observed compiler behavior, not confirmed execution. |
 
@@ -44,7 +46,29 @@ Start in **Markdown body**, write the agent's instructions and choose **Apply in
 
 Select an Action step with `uses:` to edit its `with:` inputs by name. Text, number, and boolean values can be added, changed, and removed. Existing reusable-workflow jobs with `uses:` expose the same input editor. Complex input structures lead to the matching Markdown source.
 
+Added dependencies, conditions, and permissions on generated jobs are combined with compiler-generated values rather than replacing the job or its required dependencies. `setup-steps` cannot be added to `activation` or `pre_activation`, and ordinary `steps` are shown only on supported jobs. If you configure a generated job not present in the last compiled result, enabling its trigger or feature may be required. Save and compile to verify against the actually generated jobs.
+
 Instruction sections describe the order requested of the agent; they are not independent Actions jobs. The helper does not show a live GitHub run. Check again after source changes.
+
+### Prompt assistance
+
+Choose **Edit instructions and definitions** on the generated `agent` job. In **Markdown body**, open **Add section or definition** and choose a prompt section, sub-agent or inline skill. Enter its name and instructions. Sub-agents accept optional description and model fields; inline skills accept description. Existing definition YAML remains editable in the text area, preserving authored fields. Definitions are listed separately from normal sections and can be renamed, reordered or deleted.
+
+| Item | Helper and behavior |
+|---|---|
+| Prompt section | Enter a section title and instructions. |
+| Sub-agent | Add a ``## agent: `reviewer` `` definition and matching end marker. Accepts optional `description` and `model`. |
+| Inline skill | Add a ``## skill: `review-checklist` `` definition and matching end marker. The YAML frontmatter supports `description`. |
+| Formatting / examples | Insert checklists and expected output example blocks. |
+| External content | Insert `{{#runtime-import .github/rules.md}}`. Supports public HTTP(S) URLs, line ranges, and optional skipping when missing. |
+| Run information | Select repository, actor, Issue or PR number, and insert in `${{ github.repository }}` format. |
+| Conditional prompt | Wrap selected text in `{{#if ...}}` and `{{/if}}` for Issue, PR, or manual-run conditions. |
+
+**Insert into instructions** provides checklists, output examples, `${{ ... }}` run information, file/URL runtime imports, optional imports and line ranges. Select text to wrap it in an Issue, pull request or manual-run condition. Insertions stay in the draft until **Apply instructions**; apply pending instructions before adding another section or definition.
+
+Definitions use matching `## end agent:` / `## end skill:` markers so nested `##` headings remain inside their definition. gh-aw extracts definitions from the parent prompt at runtime. Ask the parent to use the named agent or skill; defining one does not invoke it. Models and invocation behavior depend on the engine. See the [inline sub-agent reference](https://github.github.com/gh-aw/reference/inline-sub-agents/) and [inline skill implementation](https://github.com/github/gh-aw/blob/v0.89.21/actions/setup/js/extract_inline_skills.cjs).
+
+Runtime-import files must stay inside `.github`; public HTTP(S) URLs are also supported. Conditions do not support nesting or `else`. Prompt expressions cannot access secrets or environment variables. Edit advanced expressions in Markdown and validate them with the installed CLI. See [Templating](https://github.github.com/gh-aw/reference/templating/).
 
 The jobs list separates **custom jobs** from **generated jobs**. Custom jobs own their steps; generated jobs accept only supported source settings. Imports remain references. Compiled output opens read-only from the command palette.
 

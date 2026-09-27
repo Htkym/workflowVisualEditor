@@ -28,6 +28,7 @@ jobs:
         run: |
           $package = Get-Content package.json -Raw | ConvertFrom-Json
           if ($env:GITHUB_REF_NAME -ne "v$($package.version)") { throw 'Tag must match package.json version.' }
+          "VSIX_PATH=artifacts/$($package.name)-$($package.version).vsix" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           if (-not $env:VSCE_PAT) { throw 'VSCE_PAT repository secret is required.' }
           $visibility = gh repo view "$env:GITHUB_REPOSITORY" --json visibility --jq .visibility
           if ($visibility -ne 'PUBLIC') { throw 'Repository must be public before Marketplace publication.' }
@@ -36,11 +37,11 @@ jobs:
       - run: npm run package
       - run: pwsh -NoProfile -File scripts/verify-vsix.ps1
       - name: Publish to Visual Studio Marketplace
-        run: npx --no-install vsce publish --skip-duplicate --packagePath artifacts/gh-aw-visual-editor-0.1.0.vsix
+        run: npx --no-install vsce publish --skip-duplicate --packagePath "$env:VSIX_PATH"
       - name: Publish to Open VSX
         if: ${{ env.OVSX_PAT != '' }}
-        run: npx --yes ovsx publish artifacts/gh-aw-visual-editor-0.1.0.vsix --pat "$env:OVSX_PAT"
+        run: npx --yes ovsx publish "$env:VSIX_PATH" --pat "$env:OVSX_PAT"
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$env:GITHUB_REF_NAME" artifacts/gh-aw-visual-editor-0.1.0.vsix --generate-notes --verify-tag
+        run: gh release create "$env:GITHUB_REF_NAME" "$env:VSIX_PATH" --generate-notes --verify-tag

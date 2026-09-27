@@ -17,7 +17,8 @@ The extension accepts the installed `gh aw` when its version command succeeds. I
 | Custom jobs | Add/remove `jobs.<id>`; edit scalar `name`, `runs-on`, `if`, and explicit `needs` arrays; edit `on.needs` for jobs that must finish before the agent |
 | Generated job settings | Add `jobs.<built-in>.if`, additive `needs`, additive permission scopes, and `timeout-minutes` on `agent`/`detection`; remove individual added settings without deleting the generated job |
 | Steps | Add run/uses steps to custom `steps`, `pre-steps`, `setup-steps`, top-level `steps` and `post-steps`; add `pre-steps` and supported `setup-steps`/`steps` to generated jobs; edit scalar name/run/uses/if/shell/working-directory; reorder/remove ordinary sequences |
-| Instructions | Preserve Markdown as source; `##` sections outside fenced code and HTML comments become editable, reorderable steps; introductory content stays first |
+| Instructions | Add/edit/reorder prompt sections and inline agent/skill definitions; preserve nested headings inside explicit end markers and conditionals; fenced code and HTML comments do not define section boundaries |
+| Prompt assistance | Agent name/description/model; inline skill name/description; checklists/output examples; allowed run-context suggestions; file/URL/optional/ranged runtime imports; Issue/PR/manual-run conditions |
 | Generated graph | Parse current `.lock.yml` jobs/needs and ordered steps before any saved snapshot; label a file that differs from the extension record unverified; no live run status |
 
 The official compiler decides whether a combination is valid. For example, a permission value can exist in the schema but still be rejected under strict mode. The editor does not silently escalate permissions or supply missing scopes.
@@ -29,5 +30,7 @@ Omitted `needs` can acquire compiler dependencies; explicit `needs: []` means in
 Generated job `needs` augment existing dependencies, `if` combines with the compiler condition, and `permissions` merge with compiler permissions. `setup-steps` are refused for `activation` and `pre_activation`; ordinary `steps` on built-in jobs are offered only for those two jobs. The designer links `safe_outputs` to its feature settings.
 
 Compilation can update the target `.lock.yml`, `.gitattributes`, `.github/aw/actions-lock.json`, and auxiliary files for advanced configurations. Review repository changes after compiling.
+
+Inline definitions are extracted at runtime and must be invoked by name from the parent instructions. Added definitions have explicit end markers. Existing definitions without end markers require source editing before moving; appending a section after a final implicit definition closes it first. Inline skill YAML supports `description`, while agents preserve authored settings. Invocation and models depend on the selected engine. See [Inline Sub-Agents](https://github.github.com/gh-aw/reference/inline-sub-agents/), the [v0.89.21 skill extractor](https://github.com/github/gh-aw/blob/v0.89.21/actions/setup/js/extract_inline_skills.cjs), and [Templating](https://github.github.com/gh-aw/reference/templating/).
 
 Windows desktop and local file workspaces are supported. WSL, SSH, containers, Codespaces, virtual workspaces, and browser VS Code are outside the supported target.

@@ -1,5 +1,6 @@
 import type { FlowEdit, FlowModel, FlowStep, JobGraph, FlowOrigin } from '../src/core/flow';
 import { builtInJobs, jobStepSections, fields, type Group, type StepSection } from '../src/core/fields';
+import { definitionTitle, definitionBody, runtimeImport, conditionalPrompt, promptExpressions, type DefinitionKind } from '../src/core/prompts';
 
 export type FlowMode = 'flow' | 'instructions' | 'settings' | 'overview';
 export type FlowSelection = { type: 'jobs' } | { type: 'builtin' | 'job'; id: string } | { type: 'step'; lane: 'before' | 'after' | 'job'; index: number; job?: string; section?: StepSection } | { type: 'instruction'; index: number };
@@ -13,15 +14,84 @@ function button(text: string, action: () => void, disabled = false) { const b = 
 function submit(view: View, edit: FlowEdit) { view.send('flow', { edit }); }
 const originLabel = (origin: FlowOrigin) => origin === 'user' ? t('User-defined', 'ユーザー定義') : origin === 'generated' ? t('gh-aw generated', 'gh-aw自動生成') : t('Reference / unverified', '参照・未確認');
 function badge(origin: FlowOrigin) { const b = el('span', originLabel(origin), 'origin-badge'); b.dataset.origin = origin; return b; }
+function instructionAddition(parent: HTMLElement, view: View) {
+  const details = el('details', undefined, 'instruction-add'); details.id = 'instruction-add'; details.append(el('summary', t('Add section or definition', 'セクション・定義を追加')));
+  const form = el('form'), fields = el('fieldset', undefined, 'prompt-fields'); fields.disabled = view.error;
+  const kind = el('select'); kind.id = 'instruction-kind';
+  for (const [value, en, ja] of [['prompt', 'Prompt section', '通常のセクション'], ['agent', 'Sub-agent definition', 'サブエージェント定義'], ['skill', 'Inline skill definition', 'インラインスキル定義']]) { const option = el('option', t(en, ja)); option.value = value; kind.append(option); }
+  const kindLabel = el('label', t('Item to add', '追加する項目')); kindLabel.htmlFor = kind.id;
+  const title = el('input'); title.id = 'new-instruction-name'; title.required = true; title.value = t('New section', '新しいセクション'); title.oninput = view.pending;
+  const titleLabel = el('label'); titleLabel.htmlFor = title.id;
+  const description = el('input'); description.id = 'new-instruction-description'; description.oninput = view.pending;
+  const descriptionLabel = el('label', t('Description (optional)', '説明（任意）')); descriptionLabel.htmlFor = description.id;
+  const model = el('input'); model.id = 'new-instruction-model'; model.placeholder = t('Inherit the parent model', '省略すると親のモデルを使用'); model.oninput = view.pending;
+  const modelLabel = el('label', t('Model (optional)', 'モデル（任意）')); modelLabel.htmlFor = model.id;
+  const content = el('textarea'); content.id = 'new-instruction-content'; content.rows = 4; content.oninput = view.pending;
+  const contentLabel = el('label', t('Instructions', '指示の内容')); contentLabel.htmlFor = content.id;
+  const apply = el('button'); apply.type = 'submit';
+  const error = el('p', undefined, 'hint'); error.setAttribute('role', 'alert');
+  const update = () => {
+    const definition = kind.value !== 'prompt';
+    titleLabel.textContent = definition ? t('Definition name', '定義の名前') : t('Section title', 'セクション名');
+    title.pattern = definition ? '[a-z][a-z0-9_-]*' : '.*\\S.*'; title.placeholder = kind.value === 'skill' ? 'review-checklist' : 'reviewer';
+    description.hidden = descriptionLabel.hidden = !definition; model.hidden = modelLabel.hidden = kind.value !== 'agent';
+    apply.textContent = kind.value === 'agent' ? t('Add sub-agent', 'サブエージェントを追加') : kind.value === 'skill' ? t('Add skill', 'スキルを追加') : t('Add section', 'セクションを追加');
+  };
+  kind.onchange = () => { title.value = kind.value === 'prompt' ? t('New section', '新しいセクション') : ''; update(); view.pending(); }; update();
+  kind.addEventListener('prompt-restore', update);
+  fields.append(kindLabel, kind, titleLabel, title, descriptionLabel, description, modelLabel, model, contentLabel, content, apply, error); form.append(fields);
+  form.onsubmit = event => {
+    event.preventDefault();
+    try {
+      const current = view.selection?.type === 'instruction' ? view.model.instructions[view.selection.index] : undefined;
+      const draft = document.getElementById('instruction-text') as HTMLTextAreaElement | null;
+      const draftTitle = document.getElementById('instruction-title') as HTMLInputElement | null;
+      if (current && (draft && draft.value !== current.text || draftTitle && draftTitle.value !== (current.definition?.name ?? current.title))) throw new Error(t('Apply the current instructions before adding an item.', '現在の指示を適用してから項目を追加してください。'));
+      const definition = kind.value !== 'prompt';
+      if (definition && view.model.instructions.some(s => s.definition?.kind === kind.value && s.definition.name === title.value)) throw new Error(t('That definition name already exists.', '同じ名前の定義があります。'));
+      submit(view, { action: 'instruction.add', title: definition ? definitionTitle(kind.value as DefinitionKind, title.value) : title.value, text: definition ? definitionBody(kind.value as DefinitionKind, description.value, model.value, content.value) : content.value });
+      view.select({ type: 'instruction', index: view.model.instructions.length });
+    } catch (e) { error.textContent = (e as Error).message; }
+  };
+  details.append(form, el('p', t('Definitions do not invoke themselves. Add a parent instruction to use the named agent or skill. Inline skills accept description only; agent model support depends on the engine.', '定義を追加しただけでは呼び出されません。親の指示にも、利用するエージェントやスキルの名前を書いてください。インラインスキルの設定はdescriptionのみで、サブエージェントのモデル対応はEngineによって異なります。'), 'hint')); parent.append(details);
+}
+function instructionHelpers(parent: HTMLElement, textarea: HTMLTextAreaElement, view: View) {
+  const details = el('details', undefined, 'instruction-helpers'); details.id = 'instruction-helpers'; details.append(el('summary', t('Insert into instructions', '指示への入力補助')));
+  const error = el('p', undefined, 'hint'); error.setAttribute('role', 'alert');
+  const insert = (value: () => string, block = false) => {
+    try {
+      let text = value(); const start = textarea.selectionStart, end = textarea.selectionEnd;
+      if (block) text = (start && textarea.value[start - 1] !== '\n' ? '\n\n' : '') + text + (end < textarea.value.length && textarea.value[end] !== '\n' ? '\n\n' : '\n');
+      textarea.setRangeText(text, start, end, 'end'); textarea.focus(); view.pending(); error.textContent = '';
+    } catch (e) { error.textContent = (e as Error).message; }
+  };
+  details.append(el('p', t('Insert at the cursor, replacing any selected text. Apply instructions to update Markdown.', 'カーソル位置に挿入します。選択中の文字は置き換わります。「指示を適用」でMarkdownへ反映します。'), 'hint'));
+  const formats = el('div', undefined, 'flow-actions');
+  formats.append(button(t('Checklist', 'チェックリスト'), () => insert(() => '- [ ] ' + textarea.value.slice(textarea.selectionStart, textarea.selectionEnd), true), view.error), button(t('Output example', '出力例'), () => insert(() => '```text\n' + (textarea.value.slice(textarea.selectionStart, textarea.selectionEnd) || t('Expected output', '期待する出力')) + '\n```', true), view.error)); details.append(formats);
+  const expression = el('select'); expression.id = 'prompt-expression'; expression.disabled = view.error;
+  for (const [value, en, ja] of promptExpressions) { const option = el('option', `${t(en, ja)} · ${value}`); option.value = value; expression.append(option); }
+  const expressionLabel = el('label', t('Run information', '実行情報')); expressionLabel.htmlFor = expression.id;
+  details.append(expressionLabel, expression, button(t('Insert run information', '実行情報を挿入'), () => insert(() => '${{ ' + expression.value + ' }}'), view.error));
+  const path = el('input'); path.id = 'prompt-import'; path.placeholder = '.github/rules.md'; path.disabled = view.error;
+  const pathLabel = el('label', t('Import file or URL', '取り込むファイル・URL')); pathLabel.htmlFor = path.id;
+  const optionalLabel = el('label', undefined, 'check-label'), optional = el('input'); optional.type = 'checkbox'; optional.disabled = view.error; optionalLabel.append(optional, document.createTextNode(t('Skip if the file is missing', 'ファイルがない場合は省略')));
+  details.append(pathLabel, path, optionalLabel, button(t('Insert import', '取り込みを挿入'), () => insert(() => runtimeImport(path.value, optional.checked), true), view.error), el('p', t('Files resolve inside .github. Public HTTP(S) URLs and :start-end line ranges are supported.', 'ファイルは.github内の相対パスです。公開HTTP(S) URLと「:開始行-終了行」も指定できます。'), 'hint'));
+  const condition = el('select'); condition.id = 'prompt-condition'; condition.disabled = view.error;
+  for (const [value, en, ja] of [['github.event.issue.number', 'Issue event', 'Issueのイベント'], ['github.event.pull_request.number', 'Pull request event', 'PRのイベント'], ["github.event_name == 'workflow_dispatch'", 'Manual run', '手動実行']]) { const option = el('option', t(en, ja)); option.value = value; condition.append(option); }
+  const conditionLabel = el('label', t('Include text when', '文章を含める条件')); conditionLabel.htmlFor = condition.id;
+  details.append(conditionLabel, condition, button(t('Insert conditional prompt', '条件付きプロンプトを挿入'), () => insert(() => conditionalPrompt(condition.value, textarea.value.slice(textarea.selectionStart, textarea.selectionEnd) || t('Instructions for this condition', 'この条件のときの指示')), true), view.error), el('p', t('Select text to wrap it in a condition. Nested conditions and else are unsupported. Prompt expressions cannot reference secrets or environment variables.', '文字を選択すると条件文で囲めます。条件の入れ子とelseには対応していません。本文の式にはシークレットや環境変数を指定できません。'), 'hint'), error);
+  parent.append(details);
+}
 export function drawFlowDiagram(parent: HTMLElement, view: View) {
   parent.replaceChildren(el('h2', view.mode === 'instructions' ? t('Markdown body', '本文') : t('Jobs and steps', 'ジョブとステップ')));
   const list = el('div', undefined, 'resource-list');
   if (view.mode === 'instructions') {
-    parent.append(el('p', t('Choose a heading to edit the instructions in Markdown.', '見出しを選ぶと、Markdownの指示を編集できます。'), 'hint'));
-    parent.append(button(t('Add instruction', '手順を追加'), () => { submit(view, { action: 'instruction.add', title: t('New instruction', '新しい手順'), text: '' }); view.select({ type: 'instruction', index: view.model.instructions.length }); }, view.error));
+    parent.append(el('p', t('Sections are agent instructions, not Actions steps. Definitions are extracted at runtime; ask the parent to use them by name.', 'セクションはエージェントへの指示です。Actionsのステップにはなりません。定義は実行時に取り出されるため、親の指示にも利用する名前を書いてください。'), 'hint'));
+    instructionAddition(parent, view);
     view.model.instructions.forEach((section, index) => {
       const b = button(section.heading ? section.title : t('Introduction', '指示の概要'), () => view.select({ type: 'instruction', index }));
       b.dataset.nodeId = `instruction-${index}`; b.setAttribute('aria-pressed', String(view.selection?.type === 'instruction' && view.selection.index === index));
+      if (section.definition) { b.textContent = `${section.definition.kind === 'agent' ? t('Sub-agent', 'サブエージェント') : t('Skill', 'スキル')}: ${section.definition.name}`; b.dataset.definition = section.definition.kind; }
       list.append(b);
     });
     parent.append(list);
@@ -83,7 +153,7 @@ export function drawFlowInspector(parent: HTMLElement, view: View): boolean {
     if (!emitted) parent.append(el('p', t('This job is not in the last compiled result. The relevant feature or trigger may need to be enabled before these settings compile.', '最後の生成結果にはこのジョブがありません。設定を使うには、対応する機能やトリガーを有効にする必要がある場合があります。'), 'hint'));
     if (job) source(['jobs', id]);
     if (id === 'safe_outputs' || id === 'safe-outputs') parent.append(button(t('Edit Safe Outputs features', 'Safe Outputsの機能を編集'), () => view.group('safe-outputs')));
-    if (id === 'agent') parent.append(button(t('Edit engine and tools', 'Engineとツールを編集'), () => view.group('engine')));
+    if (id === 'agent') parent.append(button(t('Edit engine and tools', 'Engineとツールを編集'), () => view.group('engine')), button(t('Edit instructions and definitions', '指示と定義を編集'), () => view.select({ type: 'instruction', index: 0 })));
     const setting = (field: string, value: string | number | string[]) => submit(view, { action: 'builtin.edit', job: id, field, value });
     const clear = (field: string) => submit(view, { action: 'builtin.clear', job: id, field });
     property(parent, view, 'builtin-if', t('Additional condition (if)', '追加する実行条件（if）'), String(job?.values.if ?? ''), value => value ? setting('if', value) : clear('if'));
@@ -146,7 +216,7 @@ export function drawFlowInspector(parent: HTMLElement, view: View): boolean {
     parent.append(button(t('Go to source', 'ソースへ移動'), () => view.send('flowSource', { instruction: s.index })));
     const form = el('form');
     let title: HTMLInputElement | undefined;
-    if (s.heading) { title = el('input'); title.value = s.title; title.id = 'instruction-title'; title.oninput = view.pending; title.disabled = view.error; title.required = true; const label = el('label', t('Step title', '手順の名前')); label.htmlFor = title.id; form.append(label, title); }
+    if (s.heading) { title = el('input'); title.value = s.definition?.name ?? s.title; title.id = 'instruction-title'; title.oninput = view.pending; title.disabled = view.error; title.required = true; if (s.definition) title.pattern = '[a-z][a-z0-9_-]*'; const label = el('label', s.definition ? t('Definition name', '定義の名前') : t('Section title', 'セクション名')); label.htmlFor = title.id; form.append(label, title); }
     const textarea = el('textarea'); textarea.id = 'instruction-text'; textarea.rows = 12; textarea.value = s.text; textarea.oninput = view.pending; textarea.disabled = view.error;
     const label = el('label', t('Instructions (Markdown)', '指示の内容（Markdown）')); label.htmlFor = textarea.id;
     const apply = el('button', t('Apply instructions', '指示を適用')); apply.type = 'submit'; apply.disabled = view.error;
@@ -154,11 +224,14 @@ export function drawFlowInspector(parent: HTMLElement, view: View): boolean {
     for (const [name, prefix, suffix] of [[t('Bold', '太字'), '**', '**'], [t('List', '箇条書き'), '- ', ''], [t('Code', 'コード'), '`', '`']] as const) {
       formatting.append(button(name, () => { const start = textarea.selectionStart, end = textarea.selectionEnd; const value = textarea.value.slice(start, end); textarea.setRangeText(prefix + value + suffix, start, end, 'select'); textarea.focus(); view.pending(); }, view.error));
     }
-    form.append(label, formatting, textarea, apply); form.onsubmit = e => { e.preventDefault(); submit(view, { action: 'instruction.edit', index: s.index, title: title?.value, text: textarea.value }); }; parent.append(form);
+    if (s.definition) form.append(el('p', s.definition.kind === 'agent' ? t('Optional YAML fields: description and model. Other authored fields are preserved. The closing marker is managed separately.', '冒頭のYAMLでdescriptionとmodelを指定できます。既存の他の項目は保持します。終了マーカーは本文と分けて管理します。') : t('Inline skills support description in their YAML frontmatter. Other skill settings belong in file-based skills.', 'インラインスキルのYAML設定はdescriptionに対応しています。他のスキル設定はファイル形式のスキルで指定してください。'), 'hint'));
+    form.append(label, formatting, textarea, apply);
+    instructionHelpers(form, textarea, view);
+    form.onsubmit = e => { e.preventDefault(); submit(view, { action: 'instruction.edit', index: s.index, title: s.definition ? definitionTitle(s.definition.kind, title!.value) : title?.value, text: textarea.value }); }; parent.append(form);
     if (s.heading) {
       const actions = el('div', undefined, 'flow-actions');
       for (const direction of [-1, 1] as const) actions.append(button(direction === -1 ? t('Move earlier', '前へ') : t('Move later', '後へ'), () => { submit(view, { action: 'instruction.move', index: s.index, direction }); view.select({ type: 'instruction', index: s.index + direction }); }, view.error || !view.model.instructions[s.index + direction]?.heading));
-      actions.append(button(t('Delete instruction', '手順を削除'), () => { submit(view, { action: 'instruction.remove', index: s.index }); view.select({ type: 'instruction', index: Math.max(0, s.index - 1) }); }, view.error)); parent.append(actions);
+      actions.append(button(s.definition ? t('Delete definition', '定義を削除') : t('Delete section', 'セクションを削除'), () => { submit(view, { action: 'instruction.remove', index: s.index }); view.select({ type: 'instruction', index: Math.max(0, s.index - 1) }); }, view.error)); parent.append(actions);
     }
     return true;
   }

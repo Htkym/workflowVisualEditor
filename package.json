@@ -2,7 +2,7 @@
   "name": "gh-aw-visual-editor",
   "displayName": "Agentic Workflow Designer",
   "description": "%description%",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "htkym",
   "license": "MIT",
   "repository": {
@@ -21,7 +21,13 @@
     "Visualization",
     "Other"
   ],
-  "keywords": ["github", "agentic workflows", "workflow", "designer", "gh-aw"],
+  "keywords": [
+    "github",
+    "agentic workflows",
+    "workflow",
+    "designer",
+    "gh-aw"
+  ],
   "main": "./dist/extension.js",
   "extensionKind": [
     "workspace"
@@ -41,10 +47,16 @@
       "properties": {
         "ghAwDesigner.language": {
           "type": "string",
-          "enum": ["ja", "en"],
+          "enum": [
+            "ja",
+            "en"
+          ],
           "scope": "application",
           "description": "%languageSetting%",
-          "enumDescriptions": ["日本語", "English"]
+          "enumDescriptions": [
+            "日本語",
+            "English"
+          ]
         }
       }
     },
@@ -113,7 +125,7 @@
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit",
     "vscode:prepublish": "npm run check && npm run build",
-    "package": "vsce package --no-dependencies --out artifacts/gh-aw-visual-editor-0.1.0.vsix"
+    "package": "vsce package --no-dependencies --out artifacts/"
   },
   "dependencies": {
     "yaml": "^2.9.1"
