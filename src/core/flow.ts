@@ -1,6 +1,7 @@
 import { isAlias, isMap, isScalar, isSeq, parseDocument, stringify, visit, type Node, type YAMLMap, type YAMLSeq } from 'yaml';
 import { parseWorkflow, patchField, SourceEditRequired, type Parsed, type Patch } from './document';
 import { fields, builtInJobs, jobStepSections, type StepSection, type Value, type Field, type Group, validValue } from './fields';
+import { inlineDefinition, type DefinitionKind } from './prompts';
 export { builtInJobs, jobStepSections, type StepSection } from './fields';
 
 // v0.89.21 compiler_custom_jobs.go and compiler_builtin_job_augmentation.go:
@@ -9,7 +10,7 @@ export type FlowPath = (string | number)[];
 export type FlowOrigin = 'user' | 'generated' | 'unknown';
 export interface FlowStep { index: number; name: string; values: Record<string, Value>; editable: boolean; origin?: FlowOrigin; sourcePath?: FlowPath }
 export interface FlowJob { id: string; name: string; needs: string[]; implicit: boolean; values: Record<string, Value>; steps: FlowStep[]; preSteps?: FlowStep[]; setupSteps?: FlowStep[]; editable: boolean; origin?: FlowOrigin }
-export interface Instruction { index: number; title: string; text: string; start: number; end: number; heading: boolean }
+export interface Instruction { index: number; title: string; text: string; start: number; end: number; heading: boolean; definition?: { kind: DefinitionKind; name: string }; explicitEnd?: boolean }
 export interface FlowModel { jobs: FlowJob[]; agentNeeds: string[]; before: FlowStep[]; after: FlowStep[]; instructions: Instruction[]; beforeEditable: boolean; afterEditable: boolean }
 export interface JobGraph { jobs: FlowJob[]; warning?: string }
 export interface OverviewJob { id: string; needs: string[]; origin: FlowOrigin; implicit: boolean }
@@ -76,9 +77,9 @@ export function validFlowEdit(input: unknown): input is FlowEdit {
   if (e.action === 'step.move') return e.direction === -1 || e.direction === 1;
   return e.action === 'step.edit' && stepFields.includes(e.field!) && short(e.value);
 }
-export function instructionSections(text: string, parsed = parseWorkflow(text)): Instruction[] {
-  const starts: { start: number; title: string; content: number }[] = [];
-  let offset = parsed.bodyStart, fence = '', htmlComment = false;
+function instructionHeadings(text: string, parsed: Parsed) {
+  const starts: { start: number; title: string; content: number; conditional: boolean }[] = [];
+  let offset = parsed.bodyStart, fence = '', htmlComment = false, condition = 0;
   for (const line of parsed.body.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
     const bare = line.replace(/\r?\n$/, '');
     const marker = /^ {0,3}(`{3,}|~{3,})/.exec(bare);
@@ -86,15 +87,34 @@ export function instructionSections(text: string, parsed = parseWorkflow(text)):
       if (!fence) fence = marker[1]; else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && new RegExp(`^ {0,3}${fence[0]}{${fence.length},}\\s*$`).test(bare)) fence = '';
     } else if (!fence && !htmlComment) {
       const heading = /^##[ \t]+(.+?)[ \t]*#*[ \t]*$/.exec(bare);
-      if (heading) starts.push({ start: offset, title: heading[1], content: offset + line.length });
+      if (heading) starts.push({ start: offset, title: heading[1], content: offset + line.length, conditional: condition > 0 });
+      condition += (bare.match(/\{\{#if\b/g) ?? []).length - (bare.match(/\{\{\/if\}\}/g) ?? []).length;
+      condition = Math.max(0, condition);
     }
     if (!fence) { if (bare.includes('<!--')) htmlComment = true; if (bare.includes('-->')) htmlComment = false; }
     offset += line.length;
   }
+  return starts;
+}
+export function instructionSections(text: string, parsed = parseWorkflow(text)): Instruction[] {
+  const starts = instructionHeadings(text, parsed).filter(heading => !heading.conditional);
   const sections: Instruction[] = [];
-  const first = starts[0]?.start ?? text.length;
-  if (first > parsed.bodyStart || !starts.length) sections.push({ index: 0, title: '', text: text.slice(parsed.bodyStart, first), start: parsed.bodyStart, end: first, heading: false });
-  starts.forEach((item, i) => sections.push({ index: sections.length, title: item.title, text: text.slice(item.content, starts[i + 1]?.start ?? text.length), start: item.start, end: starts[i + 1]?.start ?? text.length, heading: true }));
+  let cursor = parsed.bodyStart;
+  for (let i = 0; i < starts.length; i++) {
+    const item = starts[i];
+    if (item.start < cursor) continue;
+    if (cursor < item.start) sections.push({ index: sections.length, title: '', text: text.slice(cursor, item.start), start: cursor, end: item.start, heading: false });
+    const definition = inlineDefinition(item.title);
+    const nextDefinition = definition && starts.slice(i + 1).find(next => inlineDefinition(next.title)?.kind === definition.kind);
+    const closing = definition && starts.slice(i + 1).find(next => next.start < (nextDefinition?.start ?? text.length) && next.title === `end ${definition.kind}: \`${definition.name}\``);
+    const end = closing ? closing.content : starts[i + 1]?.start ?? text.length;
+    sections.push({ index: sections.length, title: item.title, text: text.slice(item.content, closing ? closing.start : end), start: item.start, end, heading: true, ...(definition ? { definition, explicitEnd: !!closing } : {}) });
+    cursor = end;
+    while (starts[i + 1] && starts[i + 1].start < end) i++;
+    // Whitespace following an explicit end belongs to its definition, not an empty prompt.
+    if (closing) { const whitespace = /^[ \t\r\n]*/.exec(text.slice(cursor))![0].length; cursor += whitespace; sections.at(-1)!.end = cursor; }
+  }
+  if (cursor < text.length || !sections.length) sections.push({ index: sections.length, title: '', text: text.slice(cursor), start: cursor, end: text.length, heading: false });
   return sections;
 }
 function record(value: unknown): Record<string, Value> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, Value> : {}; }
@@ -136,7 +156,7 @@ export function sourceContext(text: string, offset: number, p = parseWorkflow(te
     const range = node?.range, start = (pair?.key as Node)?.range?.[0] ?? range?.[0];
     return start !== undefined && offset >= p.start + start && offset < p.start + (range?.[2] ?? (pair?.key as Node)?.range?.[2] ?? start + 1);
   };
-  if (offset >= p.bodyStart) { const section = model.instructions.find(s => offset >= s.start && offset <= s.end); return { group: 'instructions', selection: section && { type: 'instruction', index: section.index } }; }
+  if (offset >= p.bodyStart) { const section = model.instructions.find(s => offset >= s.start && (offset < s.end || offset === text.length && s.end === text.length)); return { group: 'instructions', selection: section && { type: 'instruction', index: section.index } }; }
   if (contains(['jobs'])) {
     for (const job of model.jobs) if (contains(['jobs', job.id])) {
       for (const section of jobStepSections(job.id)) {
@@ -392,13 +412,27 @@ function removeJob(p: Parsed, id: string): Patch {
 }
 function patchInstruction(text: string, p: Parsed, e: FlowEdit): Patch {
   const normalized = (s: string) => s.replace(/\r\n|\r|\n/g, p.eol);
-  const heading = (title: string, content: string) => `## ${title.trim()}${p.eol}${p.eol}${normalized(content).replace(/\s*$/, '')}${p.eol}${p.eol}`;
-  if (e.action === 'instruction.add') return { start: text.length, end: text.length, text: (text.endsWith(p.eol + p.eol) ? '' : p.eol) + heading(e.title!, e.text!) };
-  const sections = instructionSections(text, p), section = sections[e.index!]; if (!section) throw new Error('Unknown instruction section');
-  if (e.action === 'instruction.edit') return { start: section.start, end: section.end, text: section.heading ? heading(e.title ?? section.title, e.text!) : normalized(e.text!) + (section.end < text.length && !e.text!.endsWith('\n') ? p.eol : '') };
+  const sections = instructionSections(text, p), section = sections[e.index!];
+  const title = (e.title ?? section?.title ?? '').trim(), definition = inlineDefinition(title);
+  if (definition && ['instruction.add', 'instruction.edit'].includes(e.action) && instructionHeadings(text, p).some(heading => {
+    const existing = inlineDefinition(heading.title);
+    return heading.start !== (e.action === 'instruction.edit' ? section?.start : -1) && existing?.kind === definition.kind && existing.name === definition.name;
+  })) throw new Error('Definition name already exists. / 同じ名前の定義があります。');
+  const heading = (title: string, content: string, close: boolean) => `## ${title}${p.eol}${p.eol}${normalized(content).replace(/\s*$/, '')}${p.eol}${p.eol}${close && definition ? `## end ${definition.kind}: \`${definition.name}\`${p.eol}${p.eol}` : ''}`;
+  if (e.action === 'instruction.add') {
+    const last = sections.at(-1);
+    const closePrevious = last?.definition && !last.explicitEnd ? `## end ${last.definition.kind}: \`${last.definition.name}\`${p.eol}${p.eol}` : '';
+    return { start: text.length, end: text.length, text: (text.endsWith(p.eol + p.eol) ? '' : p.eol) + closePrevious + heading(title, e.text!, !!definition) };
+  }
+  if (!section) throw new Error('Unknown instruction section');
+  if (e.action === 'instruction.edit') {
+    if (section.definition && (!definition || definition.kind !== section.definition.kind)) throw new Error('Keep the definition type and use a valid name. / 定義の種類を維持し、有効な名前を入力してください。');
+    return { start: section.start, end: section.end, text: section.heading ? heading(title, e.text!, !!section.explicitEnd) : normalized(e.text!) + (section.end < text.length && !e.text!.endsWith('\n') ? p.eol : '') };
+  }
   if (!section.heading) throw new Error('The introduction stays first / 冒頭の指示は先頭に残します');
   if (e.action === 'instruction.remove') return { start: section.start, end: section.end, text: '' };
   const adjacent = sections[e.index! + e.direction!]; if (!adjacent?.heading) throw new Error('No adjacent instruction step / 隣の手順がありません');
+  if ([section, adjacent].some(s => s.definition && !s.explicitEnd)) throw new SourceEditRequired('Add explicit end markers before moving definitions. / 定義を移動する前に終了マーカーを追加してください。');
   const [a, b] = section.start < adjacent.start ? [section, adjacent] : [adjacent, section];
   const first = text.slice(b.start, b.end);
   return { start: a.start, end: b.end, text: first + (first.endsWith('\n') ? '' : p.eol) + text.slice(a.start, a.end) };

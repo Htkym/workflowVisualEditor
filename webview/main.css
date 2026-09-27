@@ -81,5 +81,10 @@ summary { cursor: pointer; }
 .check-label input { width: auto; }
 .editable-steps { padding-left: 24px; }
 .editable-steps li { margin: 8px 0; }
+.prompt-fields { min-width: 0; margin: 10px 0; padding: 0; border: 0; }
+.instruction-add input, .instruction-add select, .instruction-add textarea { margin-bottom: 10px; }
+.instruction-helpers { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--vscode-panel-border); }
+.instruction-helpers > label:not(.check-label) { margin-top: 14px; }
+.instruction-helpers > button { margin-top: 8px; }
 @media (max-width: 700px) { main { padding: 10px; } .layout { grid-template-columns: 1fr; } .diagram, .properties { padding: 12px; } .diagram > .resource-list { max-height: 220px; overflow: auto; } .language-switch { margin-left: 0; } }
 @media (forced-colors: active) { button, input, select, textarea { border-color: ButtonText; } }

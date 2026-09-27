@@ -5,7 +5,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parseWorkflow, patchField, fieldModels, advancedSettings, readField, sourceOffset, type Parsed } from './core/document';
 import { fields, groups, validValue, type Value } from './core/fields';
 import { templates, templateText, validName } from './core/templates';
-import { hash, inside, safePath, samePath, snapshotDependencies, importReferences, resolveImport } from './core/dependencies';
+import { hash, inside, safePath, samePath, snapshotDependencies, importEntries, importReferences, resolveImport } from './core/dependencies';
 import { Compiler } from './vscode/compiler';
 import { flowModel, sourceContext, generatedGraph, planFlowEdit, validFlowEdit, type FlowEdit, type FlowModel, type JobGraph } from './core/flow';
 
@@ -232,8 +232,9 @@ export function activate(context: vscode.ExtensionContext) {
             else if (message.type === 'compile') await compiler.compile(doc, await repositoryRoot(doc.uri));
             else if (message.type === 'import') {
               const ref = message.ref!;
-              if (!importReferences(doc.getText()).includes(ref)) throw new Error('Unknown import');
-              const root = await repositoryRoot(doc.uri), file = resolveImport(root, doc.uri.fsPath, ref);
+              const entry = importEntries(doc.getText()).find(entry => entry.ref === ref);
+              if (!entry) throw new Error('Unknown import');
+              const root = await repositoryRoot(doc.uri), file = resolveImport(root, doc.uri.fsPath, ref, entry.runtime);
               if (!file) throw new Error(t('Remote imports are resolved by the CLI.', 'リモート参照の解決はCLIに委ねます。'));
               await safePath(root, file); await vscode.window.showTextDocument(vscode.Uri.file(file), { viewColumn: vscode.ViewColumn.Beside });
             }

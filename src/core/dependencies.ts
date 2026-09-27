@@ -21,19 +21,25 @@ export async function safePath(root: string, file: string): Promise<void> {
   }
 }
 export interface DependencySnapshot { hashes: Record<string, string>; remote: string[]; missing: string[] }
-export function importReferences(text: string): string[] {
+export function importEntries(text: string): { ref: string; runtime: boolean }[] {
   let imports: unknown;
   try { imports = parseWorkflow(text).data.imports; } catch { imports = undefined; }
   if (imports && typeof imports === 'object' && !Array.isArray(imports)) imports = (imports as Record<string, unknown>).aw;
-  const refs = Array.isArray(imports) ? imports.flatMap(item => typeof item === 'string' ? [item] : item && typeof item === 'object' ? [item.path ?? item.uses].filter((x): x is string => typeof x === 'string') : []) : [];
+  const refs = (Array.isArray(imports) ? imports.flatMap(item => typeof item === 'string' ? [item] : item && typeof item === 'object' ? [item.path ?? item.uses].filter((x): x is string => typeof x === 'string') : []) : []).map(ref => ({ ref, runtime: false }));
   // gh-aw also permits Markdown includes in instruction bodies.
-  for (const match of text.matchAll(/^\s*(?:@(?:include|import)\??\s+(.+?)|\{\{#(?:runtime-import|import)\??\s*:?\s+(.+?)\}\})\s*$/gm)) refs.push((match[1] ?? match[2]).replace(/^['"]|['"]$/g, ''));
+  for (const match of text.matchAll(/^\s*(?:@(?:include|import)\??\s+(.+?)|\{\{#(?:runtime-import|import)\??\s*:?\s+(.+?)\}\})\s*$/gm)) refs.push({ ref: (match[1] ?? match[2]).replace(/^['"]|['"]$/g, ''), runtime: match[2] !== undefined });
   return refs;
 }
-export function resolveImport(root: string, from: string, ref: string): string | undefined {
+export function importReferences(text: string): string[] { return importEntries(text).map(entry => entry.ref); }
+export function resolveImport(root: string, from: string, ref: string, runtime = false): string | undefined {
   if (/^[^/\s]+\/[^/\s]+\/.+@[^\s]+$/.test(ref) || /^https?:/.test(ref)) return undefined;
-  const clean = ref.split('#')[0];
+  const clean = ref.split('#')[0].replace(/:\d+(?:-\d+)?$/, '');
   if (!clean || clean.includes('${{')) return undefined;
+  if (runtime) {
+    const directory = path.join(root, '.github'), target = path.resolve(directory, clean.replace(/^\.github\//, ''));
+    if (!inside(directory, target)) throw new Error('Runtime import is outside .github / 実行時の取り込み先が.githubの外です');
+    return target;
+  }
   return path.resolve(clean.startsWith('.github/') || clean.startsWith('/') ? root : path.dirname(from), clean.replace(/^\//, ''));
 }
 export async function snapshotDependencies(root: string, source: string, read: (file: string) => Promise<string> = file => readFile(file, 'utf8')): Promise<DependencySnapshot> {
@@ -46,9 +52,9 @@ export async function snapshotDependencies(root: string, source: string, read: (
     let text: string;
     try { text = await read(key); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; result.missing.push(key); return; }
     result.hashes[key] = hash(text);
-    for (const ref of importReferences(text)) {
-      const target = resolveImport(root, key, ref);
-      if (target) await walk(target); else if (!result.remote.includes(ref)) result.remote.push(ref);
+    for (const entry of importEntries(text)) {
+      const target = resolveImport(root, key, entry.ref, entry.runtime);
+      if (target) await walk(target); else if (!result.remote.includes(entry.ref)) result.remote.push(entry.ref);
     }
   }
   await walk(source);
