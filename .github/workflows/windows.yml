@@ -9,8 +9,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -18,7 +18,7 @@ jobs:
       - run: npm run check
       - run: npm run package
       - run: pwsh -NoProfile -File scripts/verify-vsix.ps1
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: agentic-workflow-designer-vsix
           path: artifacts/*.vsix
