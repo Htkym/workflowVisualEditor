@@ -19,13 +19,17 @@ interface State {
 let state: State | undefined;
 let selected: Group = api.getState()?.selected ?? 'metadata';
 let mode: FlowMode = api.getState()?.mode ?? 'settings';
-if (!['settings', 'instructions', 'flow', 'overview'].includes(mode)) mode = 'settings';
+if (!['settings', 'instructions', 'flow', 'overview'].includes(mode))
+  mode = 'settings';
 let flowSelection: FlowSelection | undefined = mode === 'instructions' ? { type: 'instruction', index: 0 } : undefined;
 let pending = false;
 const app = document.getElementById('app')!;
-function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string) { const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el; }
+function element<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string) { const el = document.createElement(tag); if (text !== undefined)
+  el.textContent = text; if (className)
+  el.className = className; return el; }
 function send(type: string, extra: object = {}) {
-  if (type === 'edit' || type === 'flow') setEditBusy(true);
+  if (type === 'edit' || type === 'flow')
+    setEditBusy(true);
   api.postMessage({ type, uri, version: state?.version, ...extra });
 }
 function setEditBusy(busy: boolean) {
@@ -67,23 +71,31 @@ function drawTabs() {
 function changeMode(next: FlowMode) { mode = next; pending = false; flowSelection = next === 'instructions' ? { type: 'instruction', index: 0 } : undefined; api.setState({ selected, mode }); drawTabs(); drawGraph(); drawForm(); }
 function selectFlow(selection: FlowSelection) {
   flowSelection = selection;
-  if (selection.type === 'instruction') mode = 'instructions';
+  if (selection.type === 'instruction')
+    mode = 'instructions';
   drawTabs(); drawGraph(); drawForm();
-  if (window.innerWidth < 1000) properties.scrollIntoView({ block: 'start' });
+  if (window.innerWidth < 1000)
+    properties.scrollIntoView({ block: 'start' });
 }
 function flowView() {
   return { model: state!.model!.flow, mode, selection: flowSelection, generated: state?.generated, error: !!state?.error, select: selectFlow,
     group: (group: Group) => { flowSelection = undefined; selected = group; mode = 'settings'; api.setState({ selected, mode }); drawTabs(); drawGraph(); drawForm(); },
-    send: (type: string, extra?: object) => { if (type === 'flow') pending = false; send(type, extra); }, pending: () => { pending = true; } };
+    send: (type: string, extra?: object) => { if (type === 'flow')
+      pending = false; send(type, extra); }, pending: () => { pending = true; } };
 }
 function summary(group: Group): string {
-  if (!state?.model) return '';
+  if (!state?.model)
+    return '';
   const model = state.model;
   const value = group === 'metadata' ? model.data.name : group === 'instructions' ? `${model.body.length} ${t('characters', '文字')}` : group === 'imports' ? `${model.imports.length} ${t('references', '件の参照')}` : model.data[group];
-  if (value === undefined) return t('Not declared', '未設定');
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return `${value.length} ${t('entries', '件')}`;
-  if (value && typeof value === 'object') return Object.keys(value).join(', ');
+  if (value === undefined)
+    return t('Not declared', '未設定');
+  if (typeof value === 'string')
+    return value;
+  if (Array.isArray(value))
+    return `${value.length} ${t('entries', '件')}`;
+  if (value && typeof value === 'object')
+    return Object.keys(value).join(', ');
   return String(value);
 }
 function drawGraph() {
@@ -98,37 +110,47 @@ function drawGraph() {
     return;
   }
   diagram.setAttribute('aria-label', t('Markdown outline', 'Markdownの項目一覧'));
-  if (mode !== 'settings' && state?.model?.flow) { drawFlowDiagram(diagram, flowView()); if (state.graphError) diagram.append(element('p', state.graphError, 'diagnostic')); return; }
-    diagram.replaceChildren(element('h2', t('Settings', '設定')), element('p', t('Choose a section to edit its Markdown fields.', '項目を選ぶと、そのMarkdown設定を編集できます。'), 'hint'));
-    const list = element('div', undefined, 'resource-list');
-    for (const group of groups) {
-      const b = button('', () => { pending = false; selected = group.id; flowSelection = undefined; if (group.id === 'instructions') changeMode('instructions'); else { api.setState({ selected, mode }); drawGraph(); drawForm(); } });
-      b.dataset.group = group.id; b.setAttribute('aria-pressed', String(selected === group.id));
-      b.append(element('span', group.label[japanese ? 1 : 0]), element('small', summary(group.id))); list.append(b);
-    }
-    diagram.append(list);
+  if (mode !== 'settings' && state?.model?.flow) { drawFlowDiagram(diagram, flowView()); if (state.graphError)
+    diagram.append(element('p', state.graphError, 'diagnostic')); return; }
+  diagram.replaceChildren(element('h2', t('Settings', '設定')), element('p', t('Choose a section to edit its Markdown fields.', '項目を選ぶと、そのMarkdown設定を編集できます。'), 'hint'));
+  const list = element('div', undefined, 'resource-list');
+  for (const group of groups) {
+    const b = button('', () => { pending = false; selected = group.id; flowSelection = undefined; if (group.id === 'instructions')
+      changeMode('instructions'); else { api.setState({ selected, mode }); drawGraph(); drawForm(); } });
+    b.dataset.group = group.id; b.setAttribute('aria-pressed', String(selected === group.id));
+    b.append(element('span', group.label[japanese ? 1 : 0]), element('small', summary(group.id))); list.append(b);
+  }
+  diagram.append(list);
 }
 function drawForm() {
   properties.hidden = mode === 'overview';
-  if (mode === 'overview') return;
-  if (state?.model?.flow && mode !== 'settings' && drawFlowInspector(properties, flowView())) return;
+  if (mode === 'overview')
+    return;
+  if (state?.model?.flow && mode !== 'settings' && drawFlowInspector(properties, flowView()))
+    return;
   properties.replaceChildren();
   properties.append(element('h2', groups.find(g => g.id === selected)!.label[japanese ? 1 : 0]), button(t('Go to source', 'ソースへ移動'), () => send('source', { group: selected })));
   properties.append(element('p', t('User-defined settings · saved in Markdown', 'ユーザー定義の設定 · Markdownに保存'), 'hint'));
-  if (!state?.model) return;
+  if (!state?.model)
+    return;
   if (selected === 'instructions') { properties.append(button(t('Edit instruction steps', '指示の手順を編集'), () => changeMode('instructions')), element('pre', state.model.body)); return; }
-  if (selected === 'engine') properties.append(button(t('Edit instruction steps', '指示の手順を編集'), () => changeMode('instructions')));
-  if (selected === 'engine' && state.model.flow) drawAgentDependencies(properties, flowView());
+  if (selected === 'engine')
+    properties.append(button(t('Edit instruction steps', '指示の手順を編集'), () => changeMode('instructions')));
+  if (selected === 'engine' && state.model.flow)
+    drawAgentDependencies(properties, flowView());
   if (selected === 'imports') {
     properties.append(element('p', t('References only. Local dependencies are tracked transitively; remote imports are handled by gh aw.', '参照を表示しています。ローカル依存は推移的に追跡し、リモート参照はgh awが解決します。')));
-    for (const ref of state.model.imports) properties.append(button(ref, () => send('import', { ref }), 'reference'));
-    for (const dep of state.dependencies) properties.append(element('p', `${dep.dirty ? t('Unsaved: ', '未保存: ') : ''}${dep.path}`, 'hint'));
+    for (const ref of state.model.imports)
+      properties.append(button(ref, () => send('import', { ref }), 'reference'));
+    for (const dep of state.dependencies)
+      properties.append(element('p', `${dep.dirty ? t('Unsaved: ', '未保存: ') : ''}${dep.path}`, 'hint'));
     return;
   }
   for (const f of state.model.fields.filter(f => f.group === selected)) {
     const form = element('form', undefined, 'field'); const id = f.path.join('.');
     const controller = state.model.fields.find(parent => ['presence', 'boolean'].includes(parent.kind) && parent.path.length < f.path.length && parent.path.every((part, i) => part === f.path[i]));
-    if (controller) form.dataset.controller = controller.path.join('.');
+    if (controller)
+      form.dataset.controller = controller.path.join('.');
     const label = element('label', f.label[japanese ? 1 : 0]); label.htmlFor = id;
     let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
     if (f.kind === 'boolean' || f.kind === 'presence' || f.kind === 'choice') {
@@ -155,22 +177,29 @@ function drawForm() {
       for (const value of f.options) { const option = element('option', value); option.value = value; pick.append(option); }
       const pickLabel = element('label', t('Suggestions', '候補')); pickLabel.htmlFor = pick.id;
       const add = button(f.kind === 'list' ? t('Add selected', '選択した値を追加') : t('Use selected', '選択した値を使う'), () => {
-        if (!pick.value) return;
+        if (!pick.value)
+          return;
         if (f.kind === 'list') {
           const values = input.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
-          if (!values.includes(pick.value)) input.value = [...values, pick.value].join('\n');
-        } else input.value = pick.value;
+          if (!values.includes(pick.value))
+            input.value = [...values, pick.value].join('\n');
+        } else
+          input.value = pick.value;
         pending = true; input.focus();
       }); add.disabled = input.disabled;
       candidates.append(pickLabel, pick, add, element('p', t('Choose a suggestion or type your own value above, then Apply.', '候補から追加するか、上の欄に直接入力して「適用」を押します。'), 'hint'));
       form.insertBefore(candidates, actions);
     }
-    if (f.reason) form.append(element('p', t('Source editing required: ', 'ソースで編集してください: ') + localMessage(f.reason), 'hint'), button(t('Edit in Markdown', 'Markdownで編集'), () => send('configSource', { path: f.path })));
+    if (f.reason)
+      form.append(element('p', t('Source editing required: ', 'ソースで編集してください: ') + localMessage(f.reason), 'hint'), button(t('Edit in Markdown', 'Markdownで編集'), () => send('configSource', { path: f.path })));
     form.onsubmit = e => {
       e.preventDefault(); let value: Value = input.value;
-      if (f.kind === 'boolean' || f.kind === 'presence') { if (!input.value) return; value = input.value === 'true'; }
-      else if (f.kind === 'number') { if (!input.value) return; value = Number(input.value); }
-      else if (f.kind === 'list' || f.kind === 'schedule') value = input.value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+      if (f.kind === 'boolean' || f.kind === 'presence') { if (!input.value)
+        return; value = input.value === 'true'; }
+      else if (f.kind === 'number') { if (!input.value)
+        return; value = Number(input.value); }
+      else if (f.kind === 'list' || f.kind === 'schedule')
+        value = input.value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
       pending = false; send('edit', { field: id, value });
     };
     properties.append(form);
@@ -182,7 +211,8 @@ function drawForm() {
     for (const item of advanced) {
       const row = element('div', undefined, 'field-actions');
       const controller = state.model.fields.find(parent => ['presence', 'boolean'].includes(parent.kind) && parent.path.length < item.path.length && parent.path.every((part, i) => part === item.path[i]));
-      if (controller) row.dataset.controller = controller.path.join('.');
+      if (controller)
+        row.dataset.controller = controller.path.join('.');
       row.append(element('code', item.path.join('.')), button(t('Edit in Markdown', 'Markdownで編集'), () => send('configSource', { path: item.path }))); section.append(row);
     }
     properties.append(section);
@@ -196,30 +226,36 @@ function updateVisibility() {
   }
 }
 function render() {
-  if (!state) return;
+  if (!state)
+    return;
   app.dataset.version = String(state.version);
   drawChrome();
   status.textContent = `${state.dirty ? t('Unsaved changes', '未保存の変更あり') : t('Source saved', 'ソース保存済み')} · ${localMessage(state.status)}`;
-  if (state.error) alerts.textContent = t('Current edits are not reflected below. Fix the source to resume GUI editing.\n', '現在の編集内容は未反映です。ソースを修正するとGUI編集を再開できます。\n') + state.error;
+  if (state.error)
+    alerts.textContent = t('Current edits are not reflected below. Fix the source to resume GUI editing.\n', '現在の編集内容は未反映です。ソースを修正するとGUI編集を再開できます。\n') + state.error;
   const compile = toolbar.querySelector<HTMLButtonElement>('.primary')!;
   compile.disabled = !state.trusted || !!state.model?.shared || ['running', 'queued'].includes(state.compile?.phase ?? '');
   compile.title = !state.trusted ? t('Trust the workspace to run gh aw.', 'gh awの実行にはワークスペースの信頼が必要です。') : '';
   drawTabs(); drawGraph(); drawForm(); results.replaceChildren(element('h2', t('Check result', '確認結果')));
   results.append(element('p', localMessage(state.compile?.message ?? state.status)));
-  if (state.compile?.record) results.append(element('p', `${state.compile.record.output}\ngh aw ${state.compile.record.version} · ${state.compile.record.time}`, 'hint'));
-  for (const issue of state.compile?.issues ?? []) results.append(element('p', `${issue.severity}: ${issue.message}`, 'diagnostic'));
+  if (state.compile?.record)
+    results.append(element('p', `${state.compile.record.output}\ngh aw ${state.compile.record.version} · ${state.compile.record.time}`, 'hint'));
+  for (const issue of state.compile?.issues ?? [])
+    results.append(element('p', `${issue.severity}: ${issue.message}`, 'diagnostic'));
   results.append(element('p', t('Ctrl+S saves Markdown only. Compilation can update lock YAML and auxiliary repository files. Compile success does not mean the workflow has run.', 'Ctrl+SはMarkdownだけを保存します。コンパイルではlock YAMLとリポジトリの補助ファイルを更新する場合があります。コンパイル成功はWorkflowの実行成功を意味しません。'), 'hint'));
 }
 window.addEventListener('message', event => {
   const message = event.data;
   if (message?.type === 'editComplete') { setEditBusy(false); return; }
   if (message?.type === 'selection' && message.uri === uri && message.version === state?.version && !pending) {
-    if (mode === 'overview') return;
+    if (mode === 'overview')
+      return;
     selected = message.group; mode = message.selection?.type === 'instruction' ? 'instructions' : message.selection ? 'flow' : 'settings';
     flowSelection = message.selection; drawTabs(); drawGraph(); drawForm(); return;
   }
   if (message?.type === 'error') { setEditBusy(false); alerts.textContent = localMessage(String(message.message)); return; }
-  if (message?.type !== 'state' || message.uri !== uri) return;
+  if (message?.type !== 'state' || message.uri !== uri)
+    return;
   const sameVersion = state?.version === message.version;
   const languageChanged = state?.language !== message.language || state?.languageSetting !== message.languageSetting;
   if (pending && sameVersion && !languageChanged) { state = message; return; }
@@ -229,16 +265,24 @@ window.addEventListener('message', event => {
   const openDetails = keepDraft ? Array.from(app.querySelectorAll<HTMLDetailsElement>('details[id][open]')).map(details => details.id) : [];
   const focus = document.activeElement?.id;
   japanese = message.language === 'ja'; document.documentElement.lang = japanese ? 'ja' : 'en';
-  if (pending && !keepDraft) alerts.textContent = t('The source changed. Review the refreshed form before applying.', 'ソースが変更されました。更新されたフォームを確認してから適用してください。');
-  else alerts.textContent = '';
+  if (pending && !keepDraft)
+    alerts.textContent = t('The source changed. Review the refreshed form before applying.', 'ソースが変更されました。更新されたフォームを確認してから適用してください。');
+  else
+    alerts.textContent = '';
   pending = keepDraft; state = message; render();
-  if (keepDraft) Array.from(app.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select')).forEach((input, index) => {
-    const draft = drafts[index]; if (!draft) return; input.value = draft.value;
-    if (input instanceof HTMLInputElement && draft.checked !== undefined) input.checked = draft.checked;
-    if ((input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) && draft.start !== null && draft.end !== null) input.setSelectionRange(draft.start, draft.end);
-  });
-  if (keepDraft) { document.getElementById('instruction-kind')?.dispatchEvent(new Event('prompt-restore')); for (const id of openDetails) { const details = document.getElementById(id); if (details instanceof HTMLDetailsElement) details.open = true; } }
+  if (keepDraft)
+    Array.from(app.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select')).forEach((input, index) => {
+      const draft = drafts[index]; if (!draft)
+        return; input.value = draft.value;
+      if (input instanceof HTMLInputElement && draft.checked !== undefined)
+        input.checked = draft.checked;
+      if ((input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) && draft.start !== null && draft.end !== null)
+        input.setSelectionRange(draft.start, draft.end);
+    });
+  if (keepDraft) { document.getElementById('instruction-kind')?.dispatchEvent(new Event('prompt-restore')); for (const id of openDetails) { const details = document.getElementById(id); if (details instanceof HTMLDetailsElement)
+    details.open = true; } }
   updateVisibility();
-  if (focus) document.getElementById(focus)?.focus();
+  if (focus)
+    document.getElementById(focus)?.focus();
 });
 send('ready');

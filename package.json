@@ -125,16 +125,22 @@
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit",
     "vscode:prepublish": "npm run check && npm run build",
-    "package": "vsce package --no-dependencies --out artifacts/"
+    "package": "vsce package --no-dependencies --out artifacts/",
+    "format": "eslint src webview --fix",
+    "format:check": "eslint src webview"
   },
   "dependencies": {
     "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@babel/core": "8.0.10",
+    "@babel/eslint-parser": "8.0.7",
+    "@stylistic/eslint-plugin": "5.10.0",
     "@types/node": "^26.6.2",
     "@types/vscode": "^1.96.0",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
+    "eslint": "10.14.0",
     "typescript": "^7.0.2"
   }
 }

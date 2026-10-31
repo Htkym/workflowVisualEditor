@@ -53,8 +53,11 @@ export const groups: { id: Group; label: [string, string] }[] = [
   { id: 'imports', label: ['Imports (not expanded)', 'imports（未展開）'] }
 ];
 export function validValue(f: Field, value: unknown): value is Value {
-  if (f.kind === 'presence' || f.kind === 'boolean') return typeof value === 'boolean';
-  if (f.kind === 'number') return typeof value === 'number' && Number.isSafeInteger(value) && value >= (f.path[0] === 'timeout-minutes' ? 1 : 0) && value <= 2147483647;
-  if (f.kind === 'list' || f.kind === 'schedule') return Array.isArray(value) && value.length <= 500 && value.every(x => typeof x === 'string' && x.length > 0 && x.length <= 4096 && !/[\r\n\0]/.test(x));
+  if (f.kind === 'presence' || f.kind === 'boolean')
+    return typeof value === 'boolean';
+  if (f.kind === 'number')
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= (f.path[0] === 'timeout-minutes' ? 1 : 0) && value <= 2147483647;
+  if (f.kind === 'list' || f.kind === 'schedule')
+    return Array.isArray(value) && value.length <= 500 && value.every(x => typeof x === 'string' && x.length > 0 && x.length <= 4096 && !/[\r\n\0]/.test(x));
   return typeof value === 'string' && value.length <= 16384 && !value.includes('\0') && (f.kind !== 'choice' || !!f.options?.includes(value));
 }

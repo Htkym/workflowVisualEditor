@@ -6,7 +6,8 @@ export const templates = [
 ] as const;
 export function templateText(id: string, name: string): string {
   const t = templates.find(item => item.id === id);
-  if (!t) throw new Error('Unknown template');
+  if (!t)
+    throw new Error('Unknown template');
   const trigger = id === 'issues' ? '  issues:\n    types: [opened, reopened]\n' : id === 'report' ? '  schedule:\n    - cron: "0 9 * * 1"\n' : '';
   const permissions = id === 'issues' || id === 'report' ? '  issues: read\n  pull-requests: read\n' : '';
   return `---\nname: ${JSON.stringify(name)}\ndescription: ${JSON.stringify(t.label[0])}\non:\n  workflow_dispatch:\n${trigger}engine:\n  id: copilot\npermissions:\n  contents: read\n${permissions}timeout-minutes: 15\n${t.extra}---\n\n# ${name}\n\n${t.body}\n`;
