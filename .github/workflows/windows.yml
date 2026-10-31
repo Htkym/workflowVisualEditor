@@ -2,14 +2,21 @@ name: Windows verification
 on:
   push:
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
@@ -23,3 +30,4 @@ jobs:
           name: agentic-workflow-designer-vsix
           path: artifacts/*.vsix
           if-no-files-found: error
+          retention-days: 7
